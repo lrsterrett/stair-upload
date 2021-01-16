@@ -4,33 +4,47 @@ const admin = require('firebase-admin');
 const moment = require('moment');
 
 const serviceAccount = require('./admin-key.json')
-console.log(serviceAccount.projectId)
 admin.initializeApp({
   credential: admin.credential.applicationDefault(),
   databaseURL: "https://jg-stair-app---dev.firebaseio.com"
 })
 const firestore = new admin.firestore.Firestore()
 
-const inputtedUsers = []
+let inputtedUsers = []
+let formattedUsers;
 
-fs.createReadStream('sheet.csv')
+fs.createReadStream('employees.csv')
   .pipe(csv.parse({ headers: true }))
   .on('error', error => console.error(error))
   .on('data', user => {
     inputtedUsers.push(user)
   })
   .on('end', () => {
-    const formattedUsers = formatUsers(inputtedUsers)
+    formattedUsers = formatUsers(inputtedUsers)
 
-    console.log(formattedUsers)
+    updateUsersInFirebase(formattedUsers)
 
-    // updateUsersInFirebase(formattedUsers)
+    inputtedUsers = []
 
-    const jg = aggregateJgNumbers(formattedUsers)
+    fs.createReadStream('guests.csv')
+      .pipe(csv.parse({ headers: true }))
+      .on('error', error => console.error(error))
+      .on('data', user => {
+        inputtedUsers.push(user)
+      })
+      .on('end', () => {
+        formattedGuests = formatUsers(inputtedUsers)
 
-    console.log(jg)
+        formattedUsers = formattedUsers.concat(formattedGuests)
 
-    // updateJgInFirebase(jg)
+        updateUsersInFirebase(formattedGuests)
+
+        console.log(formattedUsers)
+
+        const jg = aggregateJgNumbers(formattedUsers)
+
+        updateJgInFirebase(jg)
+      });
   });
 
 function formatUsers(inputtedUsers) {
@@ -174,8 +188,38 @@ function aggregateJgNumbers(formattedUsers) {
   }
 }
 
-function updateUsersInFirebase(formattedUsers) {
+async function updateUsersInFirebase(formattedUsers) {
   for (let user of formattedUsers) {
+
+    const id = makeid()
+
+    if (user.email) {
+
+      firestore.doc(`users/${user.email}`).set({
+        active: true,
+        allTime: user.allTime,
+        email: user.email,
+        isEmployee: true,
+        isInJG: true,
+        name: user.name,
+        search: createUserSearchArray(user.name)
+      })
+
+    } else {
+
+      firestore.doc(`users/${id}`).set({
+        active: true,
+        allTime: user.allTime,
+        isEmployee: false,
+        isInJG: true,
+        name: user.name,
+        search: createUserSearchArray(user.name)
+      })
+
+      user.email = id
+
+    }
+
     for (let day in user.days) {
       firestore.doc(`users/${user.email}/history/${user.email}${day}day`).set({
         climbs: user.days[day],
@@ -220,25 +264,22 @@ function updateUsersInFirebase(formattedUsers) {
         unit: 'year'
       })
     }
-
-    firestore.doc(`users/${user.email}`).set({
-      active: true,
-      allTime: user.allTime,
-      email: user.email,
-      isEmployee: true,
-      isInJG: true,
-      name: user.name,
-      search: createUserSearchArray(user.name)
-    })
   }
 }
 
 function updateJgInFirebase(jg) {
+  firestore.doc('groups/JG').set({
+    active: true,
+    allTime: jg.allTime,
+    members: jg.members,
+    name: 'Jahnel Group'
+  })
+
   for (let day in jg.days) {
     firestore.doc(`groups/JG/history/JG${day}day`).set({
       climbs: jg.days[day],
       date: day,
-      resourceID: jg.email,
+      resourceID: 'JG',
       unit: 'day'
     })
   }
@@ -247,7 +288,7 @@ function updateJgInFirebase(jg) {
     firestore.doc(`groups/JG/history/JG${week}week`).set({
       climbs: jg.weeks[week],
       date: week,
-      resourceID: jg.email,
+      resourceID: 'JG',
       unit: 'week'
     })
   }
@@ -256,7 +297,7 @@ function updateJgInFirebase(jg) {
     firestore.doc(`groups/JG/history/JG${month}month`).set({
       climbs: jg.months[month],
       date: month,
-      resourceID: jg.email,
+      resourceID: 'JG',
       unit: 'month'
     })
   }
@@ -265,7 +306,7 @@ function updateJgInFirebase(jg) {
     firestore.doc(`groups/JG/history/JG${quarter}quarter`).set({
       climbs: jg.quarters[quarter],
       date: quarter,
-      resourceID: jg.email,
+      resourceID: 'JG',
       unit: 'quarter'
     })
   }
@@ -274,17 +315,10 @@ function updateJgInFirebase(jg) {
     firestore.doc(`groups/JG/history/JG${year}year`).set({
       climbs: jg.years[year],
       date: year,
-      resourceID: jg.email,
+      resourceID: 'JG',
       unit: 'year'
     })
   }
-
-  firestore.doc('groups/JG').set({
-    active: true,
-    allTime: jg.allTime,
-    members: jg.members,
-    name: 'Jahnel Group'
-  })
 }
 
 
@@ -302,5 +336,17 @@ function createUserSearchArray(name) {
   }
 
   return searchArray
+}
+
+function makeid() {
+  var result = ''
+  var characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  var charactersLength = characters.length
+
+  for ( var i = 0; i < 8; i++ ) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+  }
+
+  return result;
 }
 
