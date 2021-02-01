@@ -3,10 +3,9 @@ const csv = require('@fast-csv/parse');
 const admin = require('firebase-admin');
 const moment = require('moment');
 
-const serviceAccount = require('./admin-key.json')
 admin.initializeApp({
   credential: admin.credential.applicationDefault(),
-  databaseURL: "https://jg-stair-app---dev.firebaseio.com"
+  //databaseURL: "https://jg-stair-app---dev.firebaseio.com"
 })
 const firestore = new admin.firestore.Firestore()
 
