@@ -8,12 +8,11 @@ const firestore = new admin.firestore.Firestore()
 
 let total = 0
 
-firestore.collection('users/esteere@jahnelgroup.com/history')
-  .where('unit', '==', 'day')
+firestore.collection('users')
   .get()
   .then(results => {
     results.docs.forEach(doc => {
-      total += doc.data().climbs
+      total += doc.data().allTime
     })
 
     console.log(total)
